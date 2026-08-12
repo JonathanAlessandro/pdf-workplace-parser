@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Filler - Transcrição</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs" type="module"></script>
+</head>
+<body>
+  <header>
+    <h1>Quick Filler</h1>
+    <p>Transcrição de cartão de ponto e holerite</p>
+  </header>
+
+  <main>
+    <section id="upload-section">
+      <h2>Enviar documento</h2>
+      <form id="upload-form">
+        <label>
+          Tipo
+          <select id="tipo" name="tipo" required>
+            <option value="cartao-ponto">Cartão de ponto</option>
+            <option value="holerite">Holerite</option>
+          </select>
+        </label>
+        <label>
+          PDF
+          <input type="file" id="arquivo" name="arquivo" accept="application/pdf,.pdf" required>
+        </label>
+        <button type="submit">Enviar</button>
+      </form>
+      <div id="upload-feedback" class="hidden"></div>
+    </section>
+
+    <section id="processing-section" class="hidden">
+      <h2>Processando</h2>
+      <div class="spinner"></div>
+      <p id="processing-status">Aguardando processamento...</p>
+      <button id="retry-btn" class="hidden secondary">Tentar novamente</button>
+    </section>
+
+    <section id="review-section" class="hidden">
+      <div class="review-header">
+        <h2>Revisão</h2>
+        <div class="actions">
+          <span id="save-status"></span>
+          <button id="save-btn">Salvar correções</button>
+          <div class="downloads">
+            <button data-format="xlsx">XLSX</button>
+            <button data-format="csv">CSV</button>
+            <button data-format="json">JSON</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="warnings-panel"></div>
+
+      <div class="review-layout">
+        <div class="pdf-panel">
+          <h3>Documento</h3>
+          <iframe id="pdf-viewer" title="PDF"></iframe>
+        </div>
+        <div class="table-panel">
+          <h3>Transcrição</h3>
+          <div id="editable-table"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

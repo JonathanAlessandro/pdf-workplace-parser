@@ -1,0 +1,63 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { pathToFileURL } from 'url';
+import env from '../config/env.js';
+
+let pdfjsLib;
+
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  }
+  return pdfjsLib;
+}
+
+export async function loadPdfDocument(filePath) {
+  const pdfjs = await getPdfJs();
+  const buffer = await fs.readFile(filePath);
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: true,
+  });
+  return loadingTask.promise;
+}
+
+export async function getPageCount(filePath) {
+  const doc = await loadPdfDocument(filePath);
+  const count = doc.numPages;
+  await doc.destroy();
+  return count;
+}
+
+export async function extractPageText(filePath, pageNumber) {
+  const doc = await loadPdfDocument(filePath);
+  try {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+    return text;
+  } finally {
+    await doc.destroy();
+  }
+}
+
+export async function extractAllPagesText(filePath) {
+  const doc = await loadPdfDocument(filePath);
+  const pages = [];
+  try {
+    for (let i = 1; i <= doc.numPages; i += 1) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+      pages.push({ pageNumber: i, text, source: text.length >= env.minTextLength ? 'embedded' : 'empty' });
+    }
+  } finally {
+    await doc.destroy();
+  }
+  return pages;
+}
+
+export function isTextSufficient(text) {
+  return String(text || '').trim().length >= env.minTextLength;
+}

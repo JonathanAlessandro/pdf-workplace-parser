@@ -1,0 +1,62 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: quickfiller
+      MYSQL_USER: quickfiller
+      MYSQL_PASSWORD: quickfiller
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uquickfiller", "-pquickfiller"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build: .
+    command: npm run migrate
+    env_file: .env.example
+    environment:
+      MYSQL_HOST: mysql
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build: .
+    command: npm start
+    ports:
+      - "3000:3000"
+    env_file: .env.example
+    environment:
+      MYSQL_HOST: mysql
+      NODE_ENV: production
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: npm run worker
+    env_file: .env.example
+    environment:
+      MYSQL_HOST: mysql
+      NODE_ENV: production
+    volumes:
+      - storage_data:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  storage_data:
