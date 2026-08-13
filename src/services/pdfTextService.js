@@ -35,7 +35,7 @@ export async function extractPageText(filePath, pageNumber) {
   try {
     const page = await doc.getPage(pageNumber);
     const content = await page.getTextContent();
-    const text = content.items.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+    const text = textItemsToLines(content.items);
     return text;
   } finally {
     await doc.destroy();
@@ -49,7 +49,7 @@ export async function extractAllPagesText(filePath) {
     for (let i = 1; i <= doc.numPages; i += 1) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      const text = content.items.map((item) => item.str).join(' ').replace(/\s+/g, ' ').trim();
+      const text = textItemsToLines(content.items);
       pages.push({ pageNumber: i, text, source: text.length >= env.minTextLength ? 'embedded' : 'empty' });
     }
   } finally {
@@ -61,3 +61,35 @@ export async function extractAllPagesText(filePath) {
 export function isTextSufficient(text) {
   return String(text || '').trim().length >= env.minTextLength;
 }
+
+function textItemsToLines(items) {
+  const rows = [];
+  const tolerance = 2;
+
+  for (const item of items) {
+    const text = String(item.str || '').trim();
+    if (!text) continue;
+
+    const x = item.transform?.[4] ?? 0;
+    const y = item.transform?.[5] ?? 0;
+    let row = rows.find((candidate) => Math.abs(candidate.y - y) <= tolerance);
+
+    if (!row) {
+      row = { y, items: [] };
+      rows.push(row);
+    }
+
+    row.items.push({ x, text });
+  }
+
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map((row) => row.items
+      .sort((a, b) => a.x - b.x)
+      .map((item) => item.text)
+      .join(' ')
+      .trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
