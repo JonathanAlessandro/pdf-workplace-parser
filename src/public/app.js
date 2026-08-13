@@ -65,28 +65,47 @@ function startPolling() {
 
 async function pollStatus() {
   if (!currentId) return;
-  const response = await fetch(`/api/transcricoes/${currentId}/detalhe`);
-  const data = await response.json();
 
-  if (data.status === 'processando') {
-    processingStatus.textContent = 'Processando documento...';
-    return;
-  }
+  try {
+    const response = await fetch(
+      `/api/transcricoes/${currentId}/detalhe?_=${Date.now()}`,
+      {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      },
+    );
 
-  clearInterval(pollTimer);
+    if (!response.ok) {
+      throw new Error(`Falha ao consultar status (${response.status})`);
+    }
 
-  if (data.status === 'erro') {
-    processingStatus.textContent = data.erro || 'Erro ao processar';
+    const data = await response.json();
+
+    if (data.status === 'processando') {
+      processingStatus.textContent = 'Processando documento...';
+      return;
+    }
+
+    clearInterval(pollTimer);
+
+    if (data.status === 'erro') {
+      processingStatus.textContent = data.erro || 'Erro ao processar';
+      retryBtn.classList.remove('hidden');
+      return;
+    }
+
+    currentValue = data.value;
+    currentWarnings = data.warnings || [];
+    currentTipo = data.tipo;
+    renderReview();
+    show(reviewSection);
+  } catch (error) {
+    clearInterval(pollTimer);
+    processingStatus.textContent = error.message || 'Falha ao consultar processamento';
     retryBtn.classList.remove('hidden');
-    return;
   }
-
-  currentValue = data.value;
-  currentWarnings = data.warnings || [];
-  currentTipo = data.tipo;
-  renderReview();
-  show(reviewSection);
 }
+
 
 function warningClass(reasons) {
   if (reasons.includes('non_sequential_date') || reasons.includes('non_sequential_month')) {

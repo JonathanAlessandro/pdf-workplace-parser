@@ -43,6 +43,17 @@ export async function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(express.static(path.join(__dirname, 'public')));
 
+  app.use('/api', (_req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    Pragma: 'no-cache',
+    Expires: '0',
+  });
+  res.removeHeader('ETag');
+  next();
+});
+
+
   app.use('/', webRoutes);
   app.use('/api/transcricoes', transcriptionRoutes);
   app.use('/healthz', healthRoutes);
