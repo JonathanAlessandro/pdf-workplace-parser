@@ -18,6 +18,10 @@ export async function createApp() {
 
   const app = express();
 
+  // O Render fica na frente da aplicação como proxy reverso.
+  // Confiamos somente no primeiro proxy para obter o IP real do cliente.
+  app.set('trust proxy', 1);
+
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
 
