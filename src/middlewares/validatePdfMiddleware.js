@@ -8,21 +8,21 @@ export async function validatePdfMiddleware(req, res, next) {
   }
 
   try {
-    const buffer = await fs.readFile(req.file.path);
+    const buffer = req.file.buffer || await fs.readFile(req.file.path);
     if (buffer.length < 5 || !buffer.subarray(0, 5).equals(PDF_MAGIC)) {
-      await fs.unlink(req.file.path).catch(() => {});
+      if (req.file.path) await fs.unlink(req.file.path).catch(() => {});
       return res.status(400).json({ error: 'Arquivo inválido: não é um PDF válido' });
     }
 
     if (!buffer.includes(Buffer.from('%%EOF'))) {
-      await fs.unlink(req.file.path).catch(() => {});
+      if (req.file.path) await fs.unlink(req.file.path).catch(() => {});
       return res.status(400).json({ error: 'PDF corrompido ou incompleto' });
     }
 
     req.file.buffer = buffer;
     next();
   } catch {
-    await fs.unlink(req.file.path).catch(() => {});
+    if (req.file.path) await fs.unlink(req.file.path).catch(() => {});
     return res.status(400).json({ error: 'PDF corrompido ou incompleto' });
   }
 }

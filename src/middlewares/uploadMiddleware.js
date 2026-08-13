@@ -2,9 +2,9 @@ import multer from 'multer';
 import { randomUUID } from 'crypto';
 import path from 'path';
 import env from '../config/env.js';
-import { ensureStorageDirs, getStoragePaths } from '../utils/fileStorage.js';
+import { ensureStorageDirs, getStoragePaths, isS3Enabled } from '../utils/fileStorage.js';
 
-const storage = multer.diskStorage({
+const diskStorage = multer.diskStorage({
   destination: async (_req, _file, cb) => {
     try {
       await ensureStorageDirs();
@@ -28,6 +28,8 @@ function fileFilter(_req, file, cb) {
   }
   cb(null, true);
 }
+
+const storage = isS3Enabled() ? multer.memoryStorage() : diskStorage;
 
 export const uploadMiddleware = multer({
   storage,
