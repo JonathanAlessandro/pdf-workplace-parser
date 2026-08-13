@@ -1,6 +1,4 @@
 import fs from 'fs/promises';
-import path from 'path';
-import { pathToFileURL } from 'url';
 import env from '../config/env.js';
 
 let pdfjsLib;
@@ -28,38 +26,6 @@ export async function getPageCount(filePath) {
   const count = doc.numPages;
   await doc.destroy();
   return count;
-}
-
-export async function extractPageText(filePath, pageNumber) {
-  const doc = await loadPdfDocument(filePath);
-  try {
-    const page = await doc.getPage(pageNumber);
-    const content = await page.getTextContent();
-    const text = textItemsToLines(content.items);
-    return text;
-  } finally {
-    await doc.destroy();
-  }
-}
-
-export async function extractAllPagesText(filePath) {
-  const doc = await loadPdfDocument(filePath);
-  const pages = [];
-  try {
-    for (let i = 1; i <= doc.numPages; i += 1) {
-      const page = await doc.getPage(i);
-      const content = await page.getTextContent();
-      const text = textItemsToLines(content.items);
-      pages.push({ pageNumber: i, text, source: text.length >= env.minTextLength ? 'embedded' : 'empty' });
-    }
-  } finally {
-    await doc.destroy();
-  }
-  return pages;
-}
-
-export function isTextSufficient(text) {
-  return String(text || '').trim().length >= env.minTextLength;
 }
 
 function textItemsToLines(items) {
@@ -93,3 +59,41 @@ function textItemsToLines(items) {
     .join('\n');
 }
 
+export async function extractPageText(filePath, pageNumber) {
+  const doc = await loadPdfDocument(filePath);
+
+  try {
+    const page = await doc.getPage(pageNumber);
+    const content = await page.getTextContent();
+    return textItemsToLines(content.items);
+  } finally {
+    await doc.destroy();
+  }
+}
+
+export async function extractAllPagesText(filePath) {
+  const doc = await loadPdfDocument(filePath);
+  const pages = [];
+
+  try {
+    for (let i = 1; i <= doc.numPages; i += 1) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const text = textItemsToLines(content.items);
+
+      pages.push({
+        pageNumber: i,
+        text,
+        source: text.length >= env.minTextLength ? 'embedded' : 'empty',
+      });
+    }
+  } finally {
+    await doc.destroy();
+  }
+
+  return pages;
+}
+
+export function isTextSufficient(text) {
+  return String(text || '').trim().length >= env.minTextLength;
+}
