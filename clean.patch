@@ -1,0 +1,15 @@
+(Get-Content diagnostic-error-log.patch) -replace '\x1b\[[0-9;]*[a-zA-Z]', '' | Set-Content clean.patchdiff --git a/src/middlewares/errorHandlerMiddleware.js b/src/middlewares/errorHandlerMiddleware.js
+index 65b3043..ff3c1fe 100644
+--- a/src/middlewares/errorHandlerMiddleware.js
++++ b/src/middlewares/errorHandlerMiddleware.js
+@@ -7,6 +7,10 @@ export function errorHandlerMiddleware(err, req, res, _next) {
+     requestId: req.requestId,
+     message: sanitizeErrorMessage(err),
+     code: err.code,
++    errorName: err.name,
++    statusCode: err.statusCode,
++    httpStatusCode: err.$metadata?.httpStatusCode,
++    detail: typeof err.message === 'string' ? err.message.slice(0, 240) : undefined,
+   });
+ 
+   if (err instanceof multer.MulterError) {

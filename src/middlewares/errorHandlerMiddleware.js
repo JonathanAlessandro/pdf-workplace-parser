@@ -7,6 +7,10 @@ export function errorHandlerMiddleware(err, req, res, _next) {
     requestId: req.requestId,
     message: sanitizeErrorMessage(err),
     code: err.code,
+    errorName: err.name,
+    statusCode: err.statusCode,
+    httpStatusCode: err.$metadata?.httpStatusCode,
+    detail: typeof err.message === 'string' ? err.message.slice(0, 240) : undefined,
   });
 
   if (err instanceof multer.MulterError) {
