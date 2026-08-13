@@ -1,4 +1,83 @@
+import { v4 as uuidv4 } from 'uuid';
 import env from '../config/env.js';
+import { getPool } from '../config/database.js';
+
+function mapRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    transcriptionId: row.transcription_id,
+    status: row.status,
+    attempts: row.attempts,
+    lockedAt: row.locked_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    lastError: row.last_error,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function createJob({ transcriptionId, id = uuidv4() }) {
+  const pool = getPool();
+  await pool.execute(
+    `INSERT INTO jobs (id, transcription_id, status)
+     VALUES (:id, :transcriptionId, 'pendente')`,
+    { id, transcriptionId },
+  );
+  return findById(id);
+}
+
+export async function findById(id) {
+  const pool = getPool();
+  const [rows] = await pool.execute('SELECT * FROM jobs WHERE id = :id', { id });
+  return mapRow(rows[0]);
+}
+
+export async function findByTranscriptionId(transcriptionId) {
+  const pool = getPool();
+  const [rows] = await pool.execute(
+    `SELECT * FROM jobs
+     WHERE transcription_id = :transcriptionId
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    { transcriptionId },
+  );
+  return mapRow(rows[0]);
+}
+
+export async function completeJob(id) {
+  const pool = getPool();
+  await pool.execute(
+    `UPDATE jobs
+     SET status = 'concluido', finished_at = NOW(), locked_at = NULL
+     WHERE id = :id`,
+    { id },
+  );
+  return findById(id);
+}
+
+export async function failJob(id, errorMessage) {
+  const pool = getPool();
+  await pool.execute(
+    `UPDATE jobs
+     SET status = 'erro', finished_at = NOW(), locked_at = NULL, last_error = :errorMessage
+     WHERE id = :id`,
+    { id, errorMessage: errorMessage || 'Falha ao processar job' },
+  );
+  return findById(id);
+}
+
+export async function resetJobToPending(id) {
+  const pool = getPool();
+  await pool.execute(
+    `UPDATE jobs
+     SET status = 'pendente', locked_at = NULL, last_error = NULL
+     WHERE id = :id`,
+    { id },
+  );
+  return findById(id);
+}
 
 export async function claimNextJob(connection) {
   const lockTimeoutSeconds = Math.floor(env.workerLockTimeoutMs / 1000);
@@ -33,18 +112,7 @@ export async function claimNextJob(connection) {
 
     const [rows] = await connection.execute('SELECT * FROM jobs WHERE id = :id', { id: jobId });
     await connection.commit();
-    return rows[0]
-      ? {
-          id: rows[0].id,
-          transcriptionId: rows[0].transcription_id,
-          status: rows[0].status,
-          attempts: rows[0].attempts,
-          lockedAt: rows[0].locked_at,
-          startedAt: rows[0].started_at,
-          finishedAt: rows[0].finished_at,
-          lastError: rows[0].last_error,
-        }
-      : null;
+    return mapRow(rows[0]);
   } catch (error) {
     await connection.rollback();
     throw error;
