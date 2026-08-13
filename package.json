@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
+    "start:all": "node src/workers/transcriptionWorker.js & npm start",
     "worker": "node src/workers/transcriptionWorker.js",
     "migrate": "node migrations/run.js",
     "lint": "eslint src tests migrations",
