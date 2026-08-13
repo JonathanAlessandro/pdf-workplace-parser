@@ -2,7 +2,11 @@ import fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import * as transcriptionModel from '../models/transcriptionModel.js';
 import * as jobService from './jobService.js';
-import { saveUploadedPdf, getRelativeUploadPath } from '../utils/fileStorage.js';
+import {
+  materializePdf,
+  removeTempDir,
+  saveUploadedPdf,
+} from '../utils/fileStorage.js';
 import { getExpiresAt } from './retentionService.js';
 import { processDocument } from './documentPipelineService.js';
 import { buildSpreadsheet, getWarningsForValue } from './spreadsheetService.js';
@@ -12,13 +16,12 @@ import { spreadsheetFormatSchema } from '../validators/documentSchemas.js';
 export async function createTranscription({ tipo, file }) {
   const id = uuidv4();
   const buffer = file.buffer || (await fs.readFile(file.path));
-  const absolutePath = await saveUploadedPdf(buffer, id);
-  const relativePath = getRelativeUploadPath(absolutePath);
+  const storageRef = await saveUploadedPdf(buffer, id);
 
   await transcriptionModel.createTranscription({
     id,
     type: tipo,
-    filePath: relativePath,
+    filePath: storageRef,
     expiresAt: getExpiresAt(),
   });
 
@@ -87,14 +90,21 @@ export async function exportSpreadsheet(id, formato) {
 
 export async function processTranscriptionJob(transcription, options = {}) {
   const { simulate = false } = options;
+  let materialized;
   try {
-    const { resolveUploadPath } = await import('../utils/fileStorage.js');
-    const filePath = resolveUploadPath(transcription.filePath);
-    const result = simulate
-      ? (await import('./documentPipelineService.js')).processDocumentSimulated({
-          type: transcription.type,
-        })
-      : await processDocument({ type: transcription.type, filePath });
+    let result;
+
+    if (simulate) {
+      result = await (await import('./documentPipelineService.js')).processDocumentSimulated({
+        type: transcription.type,
+      });
+    } else {
+      materialized = await materializePdf(transcription.filePath, transcription.id);
+      result = await processDocument({
+        type: transcription.type,
+        filePath: materialized.filePath,
+      });
+    }
 
     await transcriptionModel.updateStatus(transcription.id, {
       status: 'concluido',
@@ -107,5 +117,7 @@ export async function processTranscriptionJob(transcription, options = {}) {
       errorMessage: sanitizeErrorMessage(error),
     });
     throw error;
+  } finally {
+    if (materialized?.tempDir) await removeTempDir(materialized.tempDir);
   }
 }

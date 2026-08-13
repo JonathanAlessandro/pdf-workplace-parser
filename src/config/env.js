@@ -23,6 +23,12 @@ const env = {
   workerLockTimeoutMs: Number(process.env.WORKER_LOCK_TIMEOUT_MS || 300000),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 20),
+  s3: {
+    region: process.env.AWS_REGION || 'us-east-2',
+    bucket: process.env.S3_BUCKET_NAME || '',
+    prefix: process.env.S3_PREFIX || 'pdfs',
+    enabled: Boolean(process.env.S3_BUCKET_NAME),
+  },
   isProduction: (process.env.NODE_ENV || 'development') === 'production',
 };
 

@@ -40,10 +40,11 @@ export async function getPdf(req, res) {
   if (!data?.filePath) {
     return res.status(404).json({ error: 'Transcrição não encontrada' });
   }
-  const { resolveUploadPath } = await import('../utils/fileStorage.js');
-  const filePath = resolveUploadPath(data.filePath);
+  const { readStoredPdfBuffer } = await import('../utils/fileStorage.js');
+  const buffer = await readStoredPdfBuffer(data.filePath);
   res.setHeader('Content-Type', 'application/pdf');
-  res.sendFile(filePath);
+  res.setHeader('Content-Length', buffer.length);
+  res.send(buffer);
 }
 
 export async function getDetail(req, res) {

@@ -18,6 +18,7 @@
     "build": "node -e \"console.log('No build step required')\""
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
