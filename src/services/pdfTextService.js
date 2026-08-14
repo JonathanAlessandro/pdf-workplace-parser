@@ -95,5 +95,28 @@ export async function extractAllPagesText(filePath) {
 }
 
 export function isTextSufficient(text) {
-  return String(text || '').trim().length >= env.minTextLength;
+  const value = String(text || '').trim();
+  if (value.length < env.minTextLength) return false;
+
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const moneyValues = value.match(
+    /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2})/g,
+  ) || [];
+
+  const datesOrTimes = value.match(
+    /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}:\d{2}|\d{4})/g,
+  ) || [];
+
+  const meaningfulLines = lines.filter((line) =>
+    /[A-Za-zÀ-ÿ]{2,}/.test(line),
+  );
+
+  return (
+    meaningfulLines.length >= 4 &&
+    (moneyValues.length >= 2 || datesOrTimes.length >= 3)
+  );
 }
