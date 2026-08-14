@@ -273,11 +273,61 @@ function setPathValue(obj, path, value, kind) {
   }
 }
 
+function renderGenericTable() {
+  const pages = currentValue.pages || [];
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Pág.</th><th>Texto extraído</th><th>Tipo</th><th>Confiança</th><th>Revisão</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+
+  pages.forEach((page, pageIdx) => {
+    const lines = page.generic?.lines || [];
+    lines.forEach((line, lineIdx) => {
+      const entities = page.generic?.entities?.filter((item) => item.line === line.index) || [];
+      const tr = document.createElement('tr');
+      if (line.needsReview || entities.some((item) => item.needsReview)) tr.className = 'warning-yellow';
+
+      const pageTd = document.createElement('td');
+      pageTd.textContent = String(page.page || pageIdx + 1);
+      tr.appendChild(pageTd);
+
+      const textTd = document.createElement('td');
+      const input = document.createElement('input');
+      input.value = line.text || '';
+      input.dataset.path = `pages.${pageIdx}.generic.lines.${lineIdx}.text`;
+      input.addEventListener('input', onCellEdit);
+      textTd.appendChild(input);
+      tr.appendChild(textTd);
+
+      const typeTd = document.createElement('td');
+      typeTd.textContent = entities.map((item) => item.type).join(', ') || 'texto';
+      tr.appendChild(typeTd);
+
+      const confidenceTd = document.createElement('td');
+      confidenceTd.textContent = `${Math.round((line.confidence || 0) * 100)}%`;
+      tr.appendChild(confidenceTd);
+
+      const reviewTd = document.createElement('td');
+      reviewTd.textContent = line.needsReview ? 'Verificar' : 'OK';
+      tr.appendChild(reviewTd);
+      tbody.appendChild(tr);
+    });
+  });
+
+  table.appendChild(tbody);
+  editableTable.innerHTML = '';
+  const summary = currentValue.summary || {};
+  const info = document.createElement('p');
+  info.textContent = `Tipo provável: ${summary.classification?.value || 'desconhecido'} · Confiança: ${Math.round((summary.confidence || 0) * 100)}%`;
+  editableTable.appendChild(info);
+  editableTable.appendChild(table);
+}
+
 function renderReview() {
   pdfViewer.src = `/api/transcricoes/${currentId}/pdf`;
   renderWarnings();
   if (currentTipo === 'cartao-ponto') renderTimeCardTable();
-  else renderPayrollTable();
+  else if (currentTipo === 'holerite') renderPayrollTable();
+  else renderGenericTable();
   setDirty(false);
 }
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const documentTypeSchema = z.enum(['cartao-ponto', 'holerite']);
+export const documentTypeSchema = z.enum(['cartao-ponto', 'holerite', 'outro']);
 
 export const createTranscriptionSchema = z.object({
   tipo: documentTypeSchema,
@@ -53,7 +53,7 @@ export const payrollValueSchema = z.object({
 export function getValueSchemaForType(type) {
   if (type === 'cartao-ponto') return timeCardValueSchema;
   if (type === 'holerite') return payrollValueSchema;
-  throw new Error('Tipo de documento inválido');
+  return z.record(z.unknown());
 }
 
 export const updateTranscriptionSchema = z.object({

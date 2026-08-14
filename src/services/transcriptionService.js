@@ -13,6 +13,20 @@ import { buildSpreadsheet, getWarningsForValue } from './spreadsheetService.js';
 import { sanitizeErrorMessage } from '../utils/logger.js';
 import { spreadsheetFormatSchema } from '../validators/documentSchemas.js';
 
+function hasExtractedData(type, result) {
+  return (result?.pages || []).some((page) => {
+    if (type === 'cartao-ponto') {
+      return (page.days || []).some((day) => (day.punches || []).length > 0);
+    }
+
+    if (type === 'holerite') {
+      return (page.fields || []).length > 0 || (page.bases || []).length > 0;
+    }
+
+    return Boolean(page.generic?.rawText || page.generic?.entities?.length || page.generic?.tables?.length);
+  });
+}
+
 export async function createTranscription({ tipo, file }) {
   const id = uuidv4();
   const buffer = file.buffer || (await fs.readFile(file.path));
@@ -104,6 +118,10 @@ export async function processTranscriptionJob(transcription, options = {}) {
         type: transcription.type,
         filePath: materialized.filePath,
       });
+    }
+
+    if (!hasExtractedData(transcription.type, result)) {
+      throw new Error('Nenhum dado reconhecido no documento');
     }
 
     await transcriptionModel.updateStatus(transcription.id, {

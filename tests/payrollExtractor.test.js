@@ -11,9 +11,9 @@ describe('payrollExtractor', () => {
       Valor Líquido 2.282,81
     `;
     const page = payrollExtractor.extractPage({ pageNumber: 1, rawText: text });
-    expect(page.fields.some((f) => f.label.includes('Salário'))).toBe(true);
+    expect(page.fields.some((f) => f.label.toLowerCase().includes('salario'))).toBe(true);
     expect(page.fields.some((f) => f.label.toLowerCase().includes('base inss'))).toBe(false);
     expect(page.bases.some((b) => b.label.toLowerCase().includes('base inss'))).toBe(true);
-    expect(page.bases.some((b) => b.label.toLowerCase().includes('valor líquido'))).toBe(true);
+    expect(page.bases.some((b) => b.label.toLowerCase().includes('valor liquido'))).toBe(true);
   });
 });

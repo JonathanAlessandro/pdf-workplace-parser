@@ -13,12 +13,23 @@ async function renderPageWithPoppler(pdfPath, pageNumber, outputDir) {
   await execFileAsync('pdftoppm', [
     '-f', String(pageNumber),
     '-l', String(pageNumber),
+    '-r', String(env.ocrDpi || 300),
     '-png',
     '-singlefile',
     pdfPath,
     prefix,
   ]);
   return `${prefix}.png`;
+}
+
+export function normalizeOcrText(rawText) {
+  return String(rawText || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
 }
 
 async function runOcrOnImage(imagePath) {
@@ -32,7 +43,7 @@ async function runOcrOnImage(imagePath) {
     });
     const ocrPromise = worker.recognize(imagePath);
     const { data } = await Promise.race([ocrPromise, timeoutPromise]);
-    return data.text.replace(/\s+/g, ' ').trim();
+    return normalizeOcrText(data.text);
   } finally {
     await worker.terminate();
   }

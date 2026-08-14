@@ -16,6 +16,7 @@ const env = {
   storageDir: process.env.STORAGE_DIR || 'storage',
   retentionHours: Number(process.env.RETENTION_HOURS || 24),
   ocrLanguage: process.env.OCR_LANGUAGE || 'por',
+  ocrDpi: Number(process.env.OCR_DPI || 300),
   ocrTimeoutMs: Number(process.env.OCR_TIMEOUT_MS || 120000),
   pdfParseTimeoutMs: Number(process.env.PDF_PARSE_TIMEOUT_MS || 60000),
   minTextLength: Number(process.env.MIN_TEXT_LENGTH || 20),

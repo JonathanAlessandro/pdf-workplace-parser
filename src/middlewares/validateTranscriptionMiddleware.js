@@ -3,7 +3,7 @@ import { createTranscriptionSchema, getValueSchemaForType } from '../validators/
 export function validateCreateTranscription(req, res, next) {
   const parsed = createTranscriptionSchema.safeParse({ tipo: req.body.tipo });
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Tipo de documento inválido. Use cartao-ponto ou holerite.' });
+    return res.status(400).json({ error: 'Tipo de documento inválido. Use cartao-ponto, holerite ou outro.' });
   }
   req.body.tipo = parsed.data.tipo;
   next();

@@ -10,6 +10,29 @@ const YELLOW_FILL = 'FFFFF3CD';
 const RED_FILL = 'FFF8D7DA';
 const RED_BORDER = 'FFDC3545';
 
+function buildGenericRows(value) {
+  const headers = ['Pág.', 'Linha', 'Texto', 'Tipos', 'Confiança', 'Revisão'];
+  const rows = [];
+  for (const page of value.pages || []) {
+    for (const line of page.generic?.lines || []) {
+      const entities = (page.generic?.entities || []).filter((item) => item.line === line.index);
+      rows.push({
+        cells: [
+          page.page,
+          line.index + 1,
+          line.text,
+          entities.map((item) => item.type).join(', '),
+          `${Math.round((line.confidence || 0) * 100)}%`,
+          line.needsReview ? 'SIM' : 'NAO',
+        ],
+        warning: line.needsReview,
+        style: line.needsReview ? 'yellow' : null,
+      });
+    }
+  }
+  return { headers, rows };
+}
+
 function buildTimeCardRows(value) {
   const warnings = computeTimeCardWarnings(value.pages);
   const warningMap = new Map(warnings.map((w) => [`${w.page}-${w.dayIndex}`, w]));
@@ -107,7 +130,9 @@ export async function buildSpreadsheet(type, value, format) {
     const warnings =
       type === 'cartao-ponto'
         ? computeTimeCardWarnings(value.pages)
-        : computePayrollWarnings(value.pages);
+        : type === 'holerite'
+          ? computePayrollWarnings(value.pages)
+          : value.summary?.needsReview ? [{ message: 'Documento requer revisão', style: 'yellow' }] : [];
     return {
       contentType: 'application/json',
       filename: `transcricao.${format}`,
@@ -120,7 +145,11 @@ export async function buildSpreadsheet(type, value, format) {
   const sheet = workbook.addWorksheet('Transcrição');
 
   const built =
-    type === 'cartao-ponto' ? buildTimeCardRows(value) : buildPayrollRows(value);
+    type === 'cartao-ponto'
+      ? buildTimeCardRows(value)
+      : type === 'holerite'
+        ? buildPayrollRows(value)
+        : buildGenericRows(value);
 
   sheet.addRow(built.headers);
   const headerRow = sheet.getRow(1);
@@ -154,6 +183,7 @@ export async function buildSpreadsheet(type, value, format) {
 }
 
 export function getWarningsForValue(type, value) {
+  if (type === 'outro') return value.summary?.needsReview ? [{ message: 'Documento requer revisão', style: 'yellow', labels: ['Documento requer revisão'] }] : [];
   if (type === 'cartao-ponto') {
     return computeTimeCardWarnings(value.pages).map((w) => ({
       ...w,
