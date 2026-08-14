@@ -66,7 +66,9 @@ export function normalizeMonth(monthStr) {
 }
 
 export function extractMoneyValues(text) {
-  return [...text.matchAll(MONEY_PATTERN)].map((m) => m[0]);
+  return [...String(text || '').matchAll(MONEY_PATTERN)]
+    .map((match) => match[0]);
 }
+
 
 export { DATE_PATTERN, TIME_PATTERN, MONEY_PATTERN };

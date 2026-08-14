@@ -1,100 +1,167 @@
 import { extractMoneyValues, normalizeMonth } from './parseUtils.js';
-import { isBaseLabel } from './timeCardExtractor.js';
 
-const COMPETENCE_PATTERN = /(\d{2})\/(\d{4})|(\d{2})[-/](\d{2})[-/](\d{4})|compet[êe]ncia[:\s]+(\d{2})[/.-](\d{4})/i;
-const CODE_PATTERN = /^(\d{3,4})\s+(.+)$/;
+const BASE_LABELS = [
+  'base inss',
+  'base irrf',
+  'base fgts',
+  'fgts',
+  'total vencimentos',
+  'total descontos',
+  'valor liquido',
+  'liquido a receber',
+];
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeForComparison(value) {
+  return normalizeText(value).toLowerCase();
+}
 
 function parseCompetence(text) {
   const lines = String(text || '').split(/\r?\n/);
-  for (const line of lines.slice(0, 15)) {
-    const match = line.match(/(\d{2})[/.-](\d{4})/);
-    if (match) {
-      return { month: normalizeMonth(match[1]), year: match[2] };
+
+  for (const line of lines.slice(0, 30)) {
+    const competence = line.match(/(\d{2})\s*[/.-]\s*(\d{4})/);
+    if (competence) {
+      return {
+        month: normalizeMonth(competence[1]),
+        year: competence[2],
+      };
     }
-    const alt = line.match(/(\d{4})[/.-](\d{2})/);
-    if (alt) {
-      return { month: normalizeMonth(alt[2]), year: alt[1] };
+
+    const reversed = line.match(/(\d{4})\s*[/.-]\s*(\d{2})/);
+    if (reversed) {
+      return {
+        month: normalizeMonth(reversed[2]),
+        year: reversed[1],
+      };
     }
   }
+
   return { month: '', year: '' };
 }
 
-function parseFieldLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed || isBaseLabel(trimmed)) return null;
+function isBaseLine(line) {
+  const normalized = normalizeForComparison(line);
+  return BASE_LABELS.some((label) => normalized.includes(label));
+}
 
-  const codeMatch = trimmed.match(/^(\d{3,4})\s+(.+?)\s+([\d.,?]+(?:\s+[\d.,?]+)?)$/);
-  if (codeMatch) {
-    const [, code, rest, valuesPart] = codeMatch;
-    const values = extractMoneyValues(valuesPart);
-    const value = values[values.length - 1] || '';
-    const reference = values.length > 1 ? values[0] : '';
-    const label = rest.replace(/\s+[\d.,?]+$/, '').trim();
-    return { code, label, reference, value };
+function isHeaderLine(line) {
+  const normalized = normalizeForComparison(line);
+  return (
+    normalized.includes('descricao') ||
+    normalized.includes('referencia') ||
+    normalized.includes('quantidade') ||
+    normalized === 'valor' ||
+    normalized.includes('vencimentos') && normalized.includes('descontos')
+  );
+}
+
+function getMoneyMatches(line) {
+  const values = extractMoneyValues(line);
+  if (!values.length) return [];
+  return values;
+}
+
+function removeMoneyValues(text, values) {
+  let result = String(text || '');
+  for (const value of values) {
+    result = result.replace(value, ' ');
   }
+  return result.replace(/\s+/g, ' ').trim();
+}
 
-  const simpleMatch = trimmed.match(/^(.+?)\s+([\d.,?]+)$/);
-  if (simpleMatch && extractMoneyValues(simpleMatch[2]).length) {
-    return {
-      code: '',
-      label: simpleMatch[1].trim(),
-      reference: '',
-      value: simpleMatch[2].trim(),
-    };
-  }
+function parseFinancialLine(line) {
+  const normalized = normalizeText(line);
+  if (!normalized || isHeaderLine(normalized)) return null;
 
-  return null;
+  const values = getMoneyMatches(normalized);
+  if (!values.length) return null;
+
+  const codeMatch = normalized.match(/^\s*(\d{3,4})\s+/);
+  const code = codeMatch ? codeMatch[1] : '';
+  const withoutCode = codeMatch
+    ? normalized.slice(codeMatch[0].length)
+    : normalized;
+
+  const label = removeMoneyValues(withoutCode, values)
+    .replace(/^[-:|]+|[-:|]+$/g, '')
+    .trim();
+
+  if (!label || label.length < 2) return null;
+
+  return {
+    code,
+    label,
+    reference: values.length > 1 ? values[values.length - 2] : '',
+    value: values[values.length - 1],
+  };
 }
 
 function parseBaseLine(line) {
-  const trimmed = line.trim();
-  const lower = trimmed.toLowerCase();
-  if (!isBaseLabel(lower.split(/\s+/).slice(0, 3).join(' ')) && !isBaseLabel(lower)) {
-    const baseMatch = trimmed.match(/(base\s+\w+|fgts|total\s+\w+|valor\s+l[ií]quido)\s+([\d.,?]+)/i);
-    if (baseMatch) {
-      return { label: baseMatch[1].replace(/\s+/g, ' ').replace(/^./, (c) => c.toUpperCase()), value: baseMatch[2] };
-    }
-    return null;
-  }
-
-  const values = extractMoneyValues(trimmed);
+  const normalized = normalizeText(line);
+  const values = getMoneyMatches(normalized);
   if (!values.length) return null;
-  const label = trimmed.replace(values[values.length - 1], '').replace(/\s+/g, ' ').trim();
-  return { label, value: values[values.length - 1] };
+
+  const label = removeMoneyValues(normalized, values)
+    .replace(/^[-:|]+|[-:|]+$/g, '')
+    .trim();
+
+  if (!label) return null;
+
+  return {
+    label,
+    value: values[values.length - 1],
+  };
 }
 
 export function extractPage({ pageNumber, rawText }) {
   const text = String(rawText || '');
   const { month, year } = parseCompetence(text);
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map(normalizeText)
+    .filter(Boolean);
 
   const fields = [];
   const bases = [];
-  const seenFieldLabels = new Set();
-  const seenBaseLabels = new Set();
+  const seenFields = new Set();
+  const seenBases = new Set();
 
   for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (isBaseLabel(lower) || /base\s|fgts|total\s|valor\s+l[ií]quido/i.test(line)) {
+    if (isBaseLine(line)) {
       const base = parseBaseLine(line);
-      if (base && !seenBaseLabels.has(base.label.toLowerCase())) {
-        seenBaseLabels.add(base.label.toLowerCase());
-        bases.push(base);
+      if (base) {
+        const key = normalizeForComparison(base.label);
+        if (!seenBases.has(key)) {
+          seenBases.add(key);
+          bases.push(base);
+        }
       }
       continue;
     }
 
-    const field = parseFieldLine(line);
-    if (field && !isBaseLabel(field.label)) {
-      const key = `${field.code}|${field.label}`;
-      if (!seenFieldLabels.has(key)) {
-        seenFieldLabels.add(key);
-        fields.push(field);
-      }
+    const field = parseFinancialLine(line);
+    if (!field) continue;
+
+    const key = `${field.code}|${normalizeForComparison(field.label)}`;
+    if (!seenFields.has(key)) {
+      seenFields.add(key);
+      fields.push(field);
     }
   }
 
-  return { page: pageNumber, year, month, fields, bases };
+  return {
+    page: pageNumber,
+    year,
+    month,
+    fields,
+    bases,
+  };
 }
-
-export { COMPETENCE_PATTERN, CODE_PATTERN };
