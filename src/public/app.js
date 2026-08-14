@@ -322,11 +322,23 @@ function renderGenericTable() {
   editableTable.appendChild(table);
 }
 
+function hasSpecializedRows() {
+  return (currentValue.pages || []).some((page) => {
+    if (currentTipo === 'cartao-ponto') {
+      return (page.days || []).some((day) => (day.punches || []).length > 0);
+    }
+    if (currentTipo === 'holerite') {
+      return (page.fields || []).length > 0 || (page.bases || []).length > 0;
+    }
+    return false;
+  });
+}
+
 function renderReview() {
   pdfViewer.src = `/api/transcricoes/${currentId}/pdf`;
   renderWarnings();
-  if (currentTipo === 'cartao-ponto') renderTimeCardTable();
-  else if (currentTipo === 'holerite') renderPayrollTable();
+  if (currentTipo === 'cartao-ponto' && hasSpecializedRows()) renderTimeCardTable();
+  else if (currentTipo === 'holerite' && hasSpecializedRows()) renderPayrollTable();
   else renderGenericTable();
   setDirty(false);
 }

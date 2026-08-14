@@ -1,0 +1,263 @@
+diff --git a/src/public/app.js b/src/public/app.js
+index 2256159..0123059 100644
+--- a/src/public/app.js
++++ b/src/public/app.js
+@@ -273,11 +273,73 @@ function setPathValue(obj, path, value, kind) {
+   }
+ }
+ 
++function renderGenericTable() {
++  const pages = currentValue.pages || [];
++  const table = document.createElement('table');
++  table.innerHTML = '<thead><tr><th>Pág.</th><th>Texto extraído</th><th>Tipo</th><th>Confiança</th><th>Revisão</th></tr></thead>';
++  const tbody = document.createElement('tbody');
++
++  pages.forEach((page, pageIdx) => {
++    const lines = page.generic?.lines || [];
++    lines.forEach((line, lineIdx) => {
++      const entities = page.generic?.entities?.filter((item) => item.line === line.index) || [];
++      const tr = document.createElement('tr');
++      if (line.needsReview || entities.some((item) => item.needsReview)) tr.className = 'warning-yellow';
++
++      const pageTd = document.createElement('td');
++      pageTd.textContent = String(page.page || pageIdx + 1);
++      tr.appendChild(pageTd);
++
++      const textTd = document.createElement('td');
++      const input = document.createElement('input');
++      input.value = line.text || '';
++      input.dataset.path = `pages.${pageIdx}.generic.lines.${lineIdx}.text`;
++      input.addEventListener('input', onCellEdit);
++      textTd.appendChild(input);
++      tr.appendChild(textTd);
++
++      const typeTd = document.createElement('td');
++      typeTd.textContent = entities.map((item) => item.type).join(', ') || 'texto';
++      tr.appendChild(typeTd);
++
++      const confidenceTd = document.createElement('td');
++      confidenceTd.textContent = `${Math.round((line.confidence || 0) * 100)}%`;
++      tr.appendChild(confidenceTd);
++
++      const reviewTd = document.createElement('td');
++      reviewTd.textContent = line.needsReview ? 'Verificar' : 'OK';
++      tr.appendChild(reviewTd);
++      tbody.appendChild(tr);
++    });
++  });
++
++  table.appendChild(tbody);
++  editableTable.innerHTML = '';
++  const summary = currentValue.summary || {};
++  const info = document.createElement('p');
++  info.textContent = `Tipo provável: ${summary.classification?.value || 'desconhecido'} · Confiança: ${Math.round((summary.confidence || 0) * 100)}%`;
++  editableTable.appendChild(info);
++  editableTable.appendChild(table);
++}
++
++function hasSpecializedRows() {
++  return (currentValue.pages || []).some((page) => {
++    if (currentTipo === 'cartao-ponto') {
++      return (page.days || []).some((day) => (day.punches || []).length > 0);
++    }
++    if (currentTipo === 'holerite') {
++      return (page.fields || []).length > 0 || (page.bases || []).length > 0;
++    }
++    return false;
++  });
++}
++
+ function renderReview() {
+   pdfViewer.src = `/api/transcricoes/${currentId}/pdf`;
+   renderWarnings();
+-  if (currentTipo === 'cartao-ponto') renderTimeCardTable();
+-  else renderPayrollTable();
++  if (currentTipo === 'cartao-ponto' && hasSpecializedRows()) renderTimeCardTable();
++  else if (currentTipo === 'holerite' && hasSpecializedRows()) renderPayrollTable();
++  else renderGenericTable();
+   setDirty(false);
+ }
+ 
+diff --git a/src/services/extractors/timeCardExtractor.js b/src/services/extractors/timeCardExtractor.js
+index d7694b0..93bc929 100644
+--- a/src/services/extractors/timeCardExtractor.js
++++ b/src/services/extractors/timeCardExtractor.js
+@@ -4,16 +4,8 @@ import {
+   parseDateRaw,
+ } from './parseUtils.js';
+ 
+-const BASE_LABELS = new Set([
+-  'base inss',
+-  'base ir',
+-  'base irrf',
+-  'fgts',
+-  'total vencimentos',
+-  'total descontos',
+-  'valor liquido',
+-  'salario liquido',
+-]);
++const MONTH_YEAR_RE = /(?:mes\s*\/\s*ano|compet[eê]ncia)\s*:\s*(\d{1,2})\s*\/\s*(\d{4})/i;
++const DAY_ONLY_RE = /^(\d{1,2})\s*[-–]\s*(?:DOM|SEG|TER|QUA|QUI|SEX|SAB|FER)\b/i;
+ 
+ function normalizeLabel(label) {
+   return String(label || '')
+@@ -23,16 +15,6 @@ function normalizeLabel(label) {
+     .trim();
+ }
+ 
+-export function isBaseLabel(label) {
+-  const normalized = normalizeLabel(label);
+-  if (BASE_LABELS.has(normalized)) return true;
+-  return [...BASE_LABELS].some((base) => normalized.includes(base));
+-}
+-
+-function isLikelyDayLine(line) {
+-  return /\d{1,2}[/.-]\d{1,2}/.test(line);
+-}
+-
+ function assignPunchKinds(times) {
+   return times.map((time, index) => ({
+     kind: index % 2 === 0 ? 'IN' : 'OUT',
+@@ -40,36 +22,84 @@ function assignPunchKinds(times) {
+   }));
+ }
+ 
++function buildDateFromMonthYear(day, month, year) {
++  if (!month || !year) return `${String(day).padStart(2, '0')}/??/????`;
++  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
++}
++
++function extractMonthYear(lines) {
++  for (const line of lines) {
++    const match = line.match(MONTH_YEAR_RE) || line.match(/\b(\d{1,2})\s*\/\s*(\d{4})\b/);
++    if (match) return { month: match[1], year: match[2] };
++  }
++  return { month: '', year: '' };
++}
++
++function getTimesForDayLine(line, isContinuation = false) {
++  const times = extractTimesFromLine(line);
++  // Em linhas iniciadas por dia, o primeiro horário normalmente é a jornada prevista
++  // (por exemplo, 08:00). As batidas reais começam depois dele.
++  if (!isContinuation && times.length < 2) return [];
++  const punches = !isContinuation && times.length >= 2 ? times.slice(1) : times;
++  // Os horários de ocorrência (por exemplo, 00:13) vêm depois do texto da ocorrência.
++  // Em layouts de ponto, as duas primeiras horas da linha são as batidas da linha.
++  return punches.slice(0, 2);
++}
++
++function pushDay(days, day) {
++  if (!day) return;
++  const existing = days.find((item) => item.date_raw === day.date_raw);
++  if (existing) {
++    existing.punches.push(...day.punches);
++    return;
++  }
++  days.push(day);
++}
++
+ export function extractPage({ pageNumber, rawText }) {
+   const lines = String(rawText || '')
+     .split(/\r?\n/)
+-    .map((l) => l.trim())
++    .map((line) => line.trim())
+     .filter(Boolean);
+-
++  const { month, year } = extractMonthYear(lines);
+   const days = [];
++  let currentDay = null;
+ 
+   for (const line of lines) {
+-    if (!isLikelyDayLine(line)) continue;
+-    const dateRaw = extractDateFromLine(line);
+-    if (!dateRaw) continue;
+-
+-    const dateWithoutDatePart = line.replace(dateRaw, ' ').trim();
+-    const times = extractTimesFromLine(dateWithoutDatePart);
+-    const punches = assignPunchKinds(times);
+-
+-    days.push({ date_raw: dateRaw, punches });
+-  }
++    const dayMatch = line.match(DAY_ONLY_RE);
++    if (dayMatch) {
++      const dayNumber = Number(dayMatch[1]);
++      const dateRaw = buildDateFromMonthYear(dayNumber, month, year);
++      const times = getTimesForDayLine(line.replace(dayMatch[0], '').trim());
++      currentDay = { date_raw: dateRaw, punches: assignPunchKinds(times) };
++      pushDay(days, currentDay);
++      continue;
++    }
+ 
+-  if (days.length === 0 && lines.length > 0) {
+-    for (const line of lines) {
+-      const dateRaw = extractDateFromLine(line);
+-      if (dateRaw) {
+-        days.push({ date_raw: dateRaw, punches: [] });
++    // Linhas seguintes como "15:12 18:36" pertencem ao último dia identificado.
++    if (currentDay && /^\s*(?:\d{1,2}[:hH]\d{2}|\d{4})/.test(line)) {
++      const times = getTimesForDayLine(line, true);
++      const existing = days.find((item) => item.date_raw === currentDay.date_raw);
++      if (existing) {
++        const nextIndex = existing.punches.length;
++        existing.punches.push(...times.map((time, index) => ({
++          kind: (nextIndex + index) % 2 === 0 ? 'IN' : 'OUT',
++          ...time,
++        })));
+       }
++      continue;
++    }
++
++    // Compatibilidade com documentos que trazem a data completa na própria linha.
++    const dateRaw = extractDateFromLine(line);
++    if (dateRaw) {
++      const dateWithoutDatePart = line.replace(dateRaw, ' ').trim();
++      const times = extractTimesFromLine(dateWithoutDatePart);
++      if (times.length) pushDay(days, { date_raw: dateRaw, punches: assignPunchKinds(times) });
+     }
+   }
+ 
+   return { page: pageNumber, days };
+ }
+ 
+-export { parseDateRaw };
++export { normalizeLabel, parseDateRaw };
+diff --git a/src/services/transcriptionService.js b/src/services/transcriptionService.js
+index 2764546..0331310 100644
+--- a/src/services/transcriptionService.js
++++ b/src/services/transcriptionService.js
+@@ -13,6 +13,24 @@ import { buildSpreadsheet, getWarningsForValue } from './spreadsheetService.js';
+ import { sanitizeErrorMessage } from '../utils/logger.js';
+ import { spreadsheetFormatSchema } from '../validators/documentSchemas.js';
+ 
++function hasExtractedData(type, result) {
++  return (result?.pages || []).some((page) => {
++    const specializedData = type === 'cartao-ponto'
++      ? (page.days || []).some((day) => (day.punches || []).length > 0)
++      : type === 'holerite'
++        ? (page.fields || []).length > 0 || (page.bases || []).length > 0
++        : false;
++
++    if (specializedData) return true;
++
++    return Boolean(
++      page.generic?.rawText
++      || page.generic?.entities?.length
++      || page.generic?.tables?.length,
++    );
++  });
++}
++
+ export async function createTranscription({ tipo, file }) {
+   const id = uuidv4();
+   const buffer = file.buffer || (await fs.readFile(file.path));
+@@ -106,6 +124,10 @@ export async function processTranscriptionJob(transcription, options = {}) {
+       });
+     }
+ 
++    if (!hasExtractedData(transcription.type, result)) {
++      throw new Error('Nenhum dado reconhecido no documento');
++    }
++
+     await transcriptionModel.updateStatus(transcription.id, {
+       status: 'concluido',
+       result,

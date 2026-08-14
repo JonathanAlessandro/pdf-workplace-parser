@@ -15,15 +15,19 @@ import { spreadsheetFormatSchema } from '../validators/documentSchemas.js';
 
 function hasExtractedData(type, result) {
   return (result?.pages || []).some((page) => {
-    if (type === 'cartao-ponto') {
-      return (page.days || []).some((day) => (day.punches || []).length > 0);
-    }
+    const specializedData = type === 'cartao-ponto'
+      ? (page.days || []).some((day) => (day.punches || []).length > 0)
+      : type === 'holerite'
+        ? (page.fields || []).length > 0 || (page.bases || []).length > 0
+        : false;
 
-    if (type === 'holerite') {
-      return (page.fields || []).length > 0 || (page.bases || []).length > 0;
-    }
+    if (specializedData) return true;
 
-    return Boolean(page.generic?.rawText || page.generic?.entities?.length || page.generic?.tables?.length);
+    return Boolean(
+      page.generic?.rawText
+      || page.generic?.entities?.length
+      || page.generic?.tables?.length,
+    );
   });
 }
 
