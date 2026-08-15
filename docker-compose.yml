@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   mysql:
@@ -38,8 +38,11 @@ services:
     build:
       context: .
     command: npm start
+    ports:
+      - "3000:3000"
     environment:
       NODE_ENV: production
+      PORT: 3000
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-quickfiller}
