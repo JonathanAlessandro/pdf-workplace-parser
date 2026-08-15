@@ -25,7 +25,7 @@ export async function createApp() {
   app.set('view engine', 'ejs');
   app.set('views', path.join(__dirname, 'views'));
 
-  app.use(helmet({
+    app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
@@ -34,9 +34,16 @@ export async function createApp() {
         imgSrc: ["'self'", 'data:', 'blob:'],
         frameSrc: ["'self'"],
         connectSrc: ["'self'"],
+
+        // Permite usar HTTP durante a demonstração sem forçar os assets para HTTPS
+        upgradeInsecureRequests: null,
       },
     },
-  }));
+
+    // Não força HSTS enquanto o acesso for HTTP
+    strictTransportSecurity: false,
+  } ));
+
   app.use(cors());
   app.use(requestContextMiddleware);
   app.use(express.json({ limit: '1mb' }));
