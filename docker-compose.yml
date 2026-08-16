@@ -63,6 +63,13 @@ services:
     command: npm run worker
     environment:
       NODE_ENV: production
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-por}
+      OCR_DPI: ${OCR_DPI:-300}
+      OCR_TIMEOUT_MS: ${OCR_TIMEOUT_MS:-180000}
+      PDF_PARSE_TIMEOUT_MS: ${PDF_PARSE_TIMEOUT_MS:-300000}
+      MIN_TEXT_LENGTH: ${MIN_TEXT_LENGTH:-20}
+      WORKER_POLL_MS: ${WORKER_POLL_MS:-2000}
+      WORKER_LOCK_TIMEOUT_MS: ${WORKER_LOCK_TIMEOUT_MS:-600000}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: ${MYSQL_USER:-quickfiller}
